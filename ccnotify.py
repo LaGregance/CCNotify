@@ -319,6 +319,9 @@ class ClaudePromptTracker:
                 f"{subtitle}\n{current_time}",
             ]
 
+            if cwd:
+                cmd.extend(["-group", cwd])
+
             if iterm_session_id:
                 applescript = (
                     'tell application "iTerm2"\n'
@@ -340,6 +343,13 @@ class ClaudePromptTracker:
                 cmd.extend(["-execute", f"osascript -e '{applescript}'"])
             elif cwd:
                 cmd.extend(["-execute", f'/usr/local/bin/code "{cwd}"'])
+
+            if cwd:
+                subprocess.run(
+                    ["terminal-notifier", "-remove", cwd],
+                    check=False,
+                    capture_output=True,
+                )
 
             subprocess.run(cmd, check=False, capture_output=True)
             logging.info(f"Notification sent: {title} - {subtitle}")
