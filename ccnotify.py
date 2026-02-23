@@ -166,6 +166,15 @@ class ClaudePromptTracker:
                     f"Task completed for session {session_id}, job#{seq}, duration: {duration}"
                 )
 
+            # Clean up old completed records (older than 3 months)
+            cursor = conn.execute(
+                "DELETE FROM prompt WHERE stoped_at IS NOT NULL AND stoped_at < datetime('now', '-3 months')"
+            )
+            deleted_count = cursor.rowcount
+            if deleted_count > 0:
+                conn.commit()
+                logging.info(f"Cleaned up {deleted_count} old completed prompt records")
+
     def handle_notification(self, data):
         """Handle Notification event - check for various notification types and send notifications"""
         session_id = data.get("session_id")
