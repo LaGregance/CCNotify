@@ -12,6 +12,7 @@ import subprocess
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
+import re
 
 
 class ClaudePromptTracker:
@@ -61,7 +62,8 @@ class ClaudePromptTracker:
                     cwd TEXT,
                     seq INTEGER,
                     stoped_at DATETIME,
-                    lastWaitUserAt DATETIME
+                    lastWaitUserAt DATETIME,
+                    iterm_session_id TEXT
                 )
             """)
 
@@ -83,23 +85,35 @@ class ClaudePromptTracker:
 
             conn.commit()
 
+            # Migration: add iterm_session_id column
+            try:
+                conn.execute("ALTER TABLE prompt ADD COLUMN iterm_session_id TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
     def handle_user_prompt_submit(self, data):
         """Handle UserPromptSubmit event - insert new prompt record"""
         session_id = data.get("session_id")
         prompt = data.get("prompt", "")
         cwd = data.get("cwd", "")
 
+        iterm_raw = os.environ.get("ITERM_SESSION_ID", "")
+        iterm_session_id = iterm_raw.split(":")[-1] if ":" in iterm_raw else None
+        if iterm_session_id and not re.match(r'^[0-9A-Fa-f-]+$', iterm_session_id):
+            iterm_session_id = None
+
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 """
-                INSERT INTO prompt (session_id, prompt, cwd)
-                VALUES (?, ?, ?)
+                INSERT INTO prompt (session_id, prompt, cwd, iterm_session_id)
+                VALUES (?, ?, ?, ?)
             """,
-                (session_id, prompt, cwd),
+                (session_id, prompt, cwd, iterm_session_id),
             )
             conn.commit()
 
-        logging.info(f"Recorded prompt for session {session_id}")
+        logging.info(f"Recorded prompt for session {session_id}, iterm={iterm_session_id}")
 
     def handle_stop(self, data):
         """Handle Stop event - update completion time and send notification"""
@@ -109,7 +123,7 @@ class ClaudePromptTracker:
             # Find the latest unfinished record for this session
             cursor = conn.execute(
                 """
-                SELECT id, created_at, cwd
+                SELECT id, created_at, cwd, iterm_session_id
                 FROM prompt
                 WHERE session_id = ? AND stoped_at IS NULL
                 ORDER BY created_at DESC
@@ -120,7 +134,7 @@ class ClaudePromptTracker:
 
             row = cursor.fetchone()
             if row:
-                record_id, created_at, cwd = row
+                record_id, created_at, cwd, iterm_session_id = row
 
                 # Update completion time
                 conn.execute(
@@ -142,9 +156,10 @@ class ClaudePromptTracker:
 
                 duration = self.calculate_duration_from_db(record_id)
                 self.send_notification(
-                    title=os.path.basename(cwd) if cwd else "Claude Task",
+                    title=f"Claude: {os.path.basename(cwd)}" if cwd else "Claude Task",
                     subtitle=f"job#{seq} done, duration: {duration}",
                     cwd=cwd,
+                    iterm_session_id=iterm_session_id,
                 )
 
                 logging.info(
@@ -205,10 +220,27 @@ class ClaudePromptTracker:
 
         # Send notification only if should_notify is True
         if should_notify:
+            # Look up iterm_session_id for this session
+            iterm_session_id = None
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT iterm_session_id FROM prompt
+                    WHERE session_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """,
+                    (session_id,),
+                )
+                iterm_row = cursor.fetchone()
+                if iterm_row:
+                    iterm_session_id = iterm_row[0]
+
             self.send_notification(
-                title=os.path.basename(cwd) if cwd else "Claude Task",
+                title=f"Claude: {os.path.basename(cwd)}" if cwd else "Claude Task",
                 subtitle=subtitle,
                 cwd=cwd,
+                iterm_session_id=iterm_session_id,
             )
             logging.info(f"Notification sent for session {session_id}: {subtitle}")
         else:
@@ -270,7 +302,7 @@ class ClaudePromptTracker:
             logging.error(f"Error calculating duration: {e}")
             return "Unknown"
 
-    def send_notification(self, title, subtitle, cwd=None):
+    def send_notification(self, title, subtitle, cwd=None, iterm_session_id=None):
         """Send macOS notification using terminal-notifier"""
         from datetime import datetime
 
@@ -287,7 +319,26 @@ class ClaudePromptTracker:
                 f"{subtitle}\n{current_time}",
             ]
 
-            if cwd:
+            if iterm_session_id:
+                applescript = (
+                    'tell application "iTerm2"\n'
+                    "    activate\n"
+                    "    repeat with aWindow in windows\n"
+                    "        repeat with aTab in tabs of aWindow\n"
+                    "            repeat with aSession in sessions of aTab\n"
+                    f'                if unique ID of aSession is "{iterm_session_id}" then\n'
+                    "                    select aWindow\n"
+                    "                    select aTab\n"
+                    "                    select aSession\n"
+                    "                    return\n"
+                    "                end if\n"
+                    "            end repeat\n"
+                    "        end repeat\n"
+                    "    end repeat\n"
+                    "end tell"
+                )
+                cmd.extend(["-execute", f"osascript -e '{applescript}'"])
+            elif cwd:
                 cmd.extend(["-execute", f'/usr/local/bin/code "{cwd}"'])
 
             subprocess.run(cmd, check=False, capture_output=True)
