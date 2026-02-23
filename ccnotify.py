@@ -315,7 +315,7 @@ class ClaudePromptTracker:
                 "default",
                 "-title",
                 title,
-                "-subtitle",
+                "-message",
                 f"{subtitle}\n{current_time}",
             ]
 

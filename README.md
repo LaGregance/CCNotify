@@ -22,8 +22,9 @@ Starting from claude-code v1.0.95 (2025-08-31), any invalid settings in `~/.clau
 # Create the directory if it doesn't exist
 mkdir -p ~/.claude/ccnotify
 
-# soft link ccnotify.py to the directory
-ln -f ccnotify.py ~/.claude/ccnotify/
+# symbolic link ccnotify.py to the directory
+cd ~/.claude/ccnotify
+ln -s /<PATH TO CCNotify>/ccnotify.py ccnotify.py
 
 chmod a+x ~/.claude/ccnotify/ccnotify.py
 
