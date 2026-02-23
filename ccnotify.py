@@ -155,11 +155,13 @@ class ClaudePromptTracker:
                 seq = seq_row[0] if seq_row else 1
 
                 duration = self.calculate_duration_from_db(record_id)
+                icon_path = self.find_project_icon(cwd)
                 self.send_notification(
                     title=f"Claude: {os.path.basename(cwd)}" if cwd else "Claude Task",
                     subtitle=f"job#{seq} done, duration: {duration}",
                     cwd=cwd,
                     iterm_session_id=iterm_session_id,
+                    icon_path=icon_path,
                 )
 
                 logging.info(
@@ -245,11 +247,13 @@ class ClaudePromptTracker:
                 if iterm_row:
                     iterm_session_id = iterm_row[0]
 
+            icon_path = self.find_project_icon(cwd)
             self.send_notification(
                 title=f"Claude: {os.path.basename(cwd)}" if cwd else "Claude Task",
                 subtitle=subtitle,
                 cwd=cwd,
                 iterm_session_id=iterm_session_id,
+                icon_path=icon_path,
             )
             logging.info(f"Notification sent for session {session_id}: {subtitle}")
         else:
@@ -311,7 +315,28 @@ class ClaudePromptTracker:
             logging.error(f"Error calculating duration: {e}")
             return "Unknown"
 
-    def send_notification(self, title, subtitle, cwd=None, iterm_session_id=None):
+    def find_project_icon(self, cwd):
+        """Find a project icon file in common locations relative to cwd"""
+        if not cwd:
+            return None
+
+        candidates = [
+            "icon.png",
+            "logo.png",
+            "public/icon.png",
+            "public/logo.png",
+            "src/app/icon.png",
+            "src/app/logo.png",
+        ]
+
+        for candidate in candidates:
+            path = os.path.join(cwd, candidate)
+            if os.path.isfile(path):
+                return os.path.abspath(path)
+
+        return None
+
+    def send_notification(self, title, subtitle, cwd=None, iterm_session_id=None, icon_path=None):
         """Send macOS notification using terminal-notifier"""
         from datetime import datetime
 
@@ -330,6 +355,9 @@ class ClaudePromptTracker:
 
             if cwd:
                 cmd.extend(["-group", cwd])
+
+            if icon_path:
+                cmd.extend(["-contentImage", icon_path])
 
             if iterm_session_id:
                 applescript = (

@@ -19,20 +19,11 @@ Starting from claude-code v1.0.95 (2025-08-31), any invalid settings in `~/.clau
 
 ### 1. Install CCNotify
 ```bash
-# Create the directory if it doesn't exist
-mkdir -p ~/.claude/ccnotify
-
-# symbolic link ccnotify.py to the directory
-cd ~/.claude/ccnotify
-ln -s /<PATH TO CCNotify>/ccnotify.py ccnotify.py
-
-chmod a+x ~/.claude/ccnotify/ccnotify.py
+# Clone the repo
+git clone https://github.com/LaGregance/CCNotify
 
 # run this script, should print: ok
-~/.claude/ccnotify/ccnotify.py
-
-ok
-
+cd CCNotify && ./ccnotify.py
 ```
 ### 2. Install terminal-notifier
 ccnotify uses `terminal-notifier` for macOS notifications. Install it using Homebrew:
@@ -56,7 +47,7 @@ Add the following hooks to your Claude configuration to enable ccnotify:
       "hooks": [
         {
           "type": "command",
-          "command": "~/.claude/ccnotify/ccnotify.py UserPromptSubmit"
+          "command": "/PATH_TO_CCNOTIFY/ccnotify.py UserPromptSubmit"
         }
       ]
     }
@@ -66,7 +57,7 @@ Add the following hooks to your Claude configuration to enable ccnotify:
       "hooks": [
         {
           "type": "command",
-          "command": "~/.claude/ccnotify/ccnotify.py Stop"
+          "command": "/PATH_TO_CCNOTIFY/ccnotify.py Stop"
         }
       ]
     }
@@ -76,7 +67,7 @@ Add the following hooks to your Claude configuration to enable ccnotify:
       "hooks": [
         {
           "type": "command",
-          "command": "~/.claude/ccnotify/ccnotify.py Notification"
+          "command": "/PATH_TO_CCNOTIFY/ccnotify.py Notification"
         }
       ]
     }
